@@ -1,4 +1,4 @@
-# $Id: DesktopEntry.pm,v 1.1.1.1 2005/01/01 19:29:35 jodrell Exp $
+# $Id: DesktopEntry.pm,v 1.3 2005/01/01 20:19:45 jodrell Exp $
 # Copyright (c) 2005 Gavin Brown. All rights reserved. This program is
 # free software; you can redistribute it and/or modify it under the same
 # terms as Perl itself. 
@@ -8,7 +8,7 @@ use vars qw($VERSION $DEFAULT_GROUP $DEFAULT_LOCALE @REQUIRED $VERBOSE $SILENT);
 use utf8;
 use strict;
 
-our $VERSION		= '0.01';
+our $VERSION		= '0.02';
 our $DEFAULT_GROUP	= 'Desktop Entry';
 our $DEFAULT_LOCALE	= 'C';
 our @REQUIRED		= qw(Encoding Name Type);
@@ -44,7 +44,7 @@ C<carp()> and return an undefined value.
 
 =cut
 
-sub new {
+sub new_from_data {
 	my ($package, $data) = @_;
 	my $self = { _raw => $data };
 	bless($self, $package);
