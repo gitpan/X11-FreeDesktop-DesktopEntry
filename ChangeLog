@@ -1,6 +1,11 @@
 ChangeLog
 =========
 
+v0.03 - 2005-01-03:
+
+	Implemented modification of values, and serialisation using as_string().
+	Improved documentation.
+
 v0.02 - 2005-01-01:
 
 	Forgot to change the new() method's name to new_from_data(). Oops.
@@ -10,4 +15,4 @@ v0.01 - 2005-01-01:
 	Initial release.
 
 --
-$Id: ChangeLog,v 1.1 2005/01/01 20:19:45 jodrell Exp $
+$Id: ChangeLog,v 1.2 2005/01/03 18:12:38 jodrell Exp $

@@ -1,14 +1,15 @@
-# $Id: DesktopEntry.pm,v 1.3 2005/01/01 20:19:45 jodrell Exp $
+# $Id: DesktopEntry.pm,v 1.4 2005/01/03 18:12:38 jodrell Exp $
 # Copyright (c) 2005 Gavin Brown. All rights reserved. This program is
 # free software; you can redistribute it and/or modify it under the same
 # terms as Perl itself. 
 package X11::FreeDesktop::DesktopEntry;
 use Carp;
-use vars qw($VERSION $DEFAULT_GROUP $DEFAULT_LOCALE @REQUIRED $VERBOSE $SILENT);
+use vars qw($VERSION $ROOT_GROUP $DEFAULT_GROUP $DEFAULT_LOCALE @REQUIRED $VERBOSE $SILENT);
 use utf8;
 use strict;
 
-our $VERSION		= '0.02';
+our $VERSION		= '0.03';
+our $ROOT_GROUP		= '_root';
 our $DEFAULT_GROUP	= 'Desktop Entry';
 our $DEFAULT_LOCALE	= 'C';
 our @REQUIRED		= qw(Encoding Name Type);
@@ -29,17 +30,31 @@ X11::FreeDesktop::DesktopEntry - an interface to Freedesktop.org .desktop files.
 
 	print $entry->get_value('Name');
 
+	print $entry->Exec;
+
+	$entry->set_value('Name', 'Example Program');
+
+	print $entry->as_string;
+
+	$entry->reset;
+
 =head1 DESCRIPTION
 
 This module provides an object-oriented interface to files that comply with the
 Freedesktop.org desktop entry specification. You can query the file for
-available values and also get locale information as well.
+available values, modify them, and also get locale information as well.
 
 =head1 CONSTRUCTOR
 
+X11::FreeDesktop::DesktopEntry doesn't have the standard C<new()> constructor.
+This allows subclasses to implement their own backend-specific constructor
+without needing to re-implement the constructor, which can be a pain I<(for an
+example subclass that uses L<Gnome2::VFS> as a backend, see the C<PerlPanel::DesktopEntry>
+module in the PerlPanel distribution)>.
+
 	my $entry = X11::FreeDesktop::DesktopEntry->new_from_data($data);
 
-If there is an error reading or parsing the file, the constructor will
+If there is an error reading or parsing the data, the constructor will
 C<carp()> and return an undefined value.
 
 =cut
@@ -71,11 +86,7 @@ sub parse {
 			# the spec requires that we be able to preserve comments, so
 			# we need to note the position that the comment occurred at, relative
 			# to the current group and last key:
-			push(@{$self->{comments}}, {
-				text		=> $1,
-				group		=> (defined($current_group) ? $current_group : '_root'),
-				last_key	=> $last_key,
-			});
+			push(@{$self->{comments}->{(defined($current_group) ? $current_group : $ROOT_GROUP)}->{$last_key}}, $1);
 		
 		} elsif ($line =~ /^\[([^\[]+)\]/) {
 			# defines a new group:
@@ -111,6 +122,7 @@ sub parse {
 			# an error:
 			carp(sprintf('Parse error on %s line %s: no group name defined', $self->{uri}, $i+1)) unless ($SILENT == 1);
 			return undef;
+
 		}
 	}
 	return 1;
@@ -189,7 +201,7 @@ sub keys {
 	my %keys;
 	foreach my $key (keys(%{$self->{data}->{$group}})) {
 		# add the key if $locale is defined and a value exists for that locale, or if $locale isn't defined:
-		$keys{$key} ++ if ((defined($locale) && defined($self->{data}->{$group}->{$key}->{$locale})) || !defined($locale));
+		$keys{$key}++ if ((defined($locale) && defined($self->{data}->{$group}->{$key}->{$locale})) || !defined($locale));
 	}
 	if ($locale ne $DEFAULT_LOCALE) {
 		# fold in the keys for the default locale:
@@ -212,6 +224,35 @@ group (C<'Desktop Entry'>) will be used.
 
 sub has_key {
 	return defined($_[0]->{data}->{defined($_[2]) ? $_[2] : $DEFAULT_GROUP}->{$_[1]});
+}
+
+=pod
+
+	my @locales = $entry->locales($key, $group);
+
+Returns an array of strings naming all the available locales for the given
+C<$key>. If C<$key> or C<$group> don't exist in the file, this method will
+C<carp()> and return undef. There should always be at least one locale in the
+returned array - the default locale, 'C<C>'.
+
+=cut
+
+sub locales {
+	my ($self, $key, $group) = @_;
+	$group	= (defined($group) ? $group : $DEFAULT_GROUP);
+
+	if (!$self->has_group($group)) {
+		carp(sprintf('get_value(): no \'%s\' group found', $group)) if ($VERBOSE == 1);
+		return undef;
+
+	} elsif (!$self->has_key($key, $group)) {
+		carp(sprintf('get_value(): no \'%s\' key found in \'%s\'', $key, $group)) if ($VERBOSE == 1);
+		return undef;
+
+	} else {
+		return keys(%{$self->{data}->{$group}->{$key}});
+
+	}
 }
 
 =pod
@@ -257,31 +298,86 @@ sub get_value {
 
 =pod
 
-	my @locales = $entry->locales($key, $group);
+	$entry->set_value($key, $value, $locale, $group);
 
-Returns an array of strings naming all the available locales for the given
-C<$key>. If C<$key> or C<$group> don't exist in the file, this method will
-C<carp()> and return undef. There should always be at least one locale in the
-returned array - the default locale, 'C<C>'.
+This method sets the value of the C<$key> key in the C<$locale> locale and
+C<$group> group to be C<$value>. If C<$locale> and C<$group> are omitted, the
+defaults are used. C<$value> is always interpreted as a string. This method
+always returns true.
 
 =cut
 
-sub locales {
-	my ($self, $key, $group) = @_;
+sub set_value {
+	my ($self, $key, $value, $locale, $group) = @_;
 	$group	= (defined($group) ? $group : $DEFAULT_GROUP);
+	$locale	= (defined($locale) ? $locale : $DEFAULT_LOCALE);
+	$self->{data}->{$group}->{$key}->{$locale} = $value;
+	return 1;
+}
 
-	if (!$self->has_group($group)) {
-		carp(sprintf('get_value(): no \'%s\' group found', $group)) if ($VERBOSE == 1);
-		return undef;
+=pod
 
-	} elsif (!$self->has_key($key, $group)) {
-		carp(sprintf('get_value(): no \'%s\' key found in \'%s\'', $key, $group)) if ($VERBOSE == 1);
-		return undef;
+	my $data = $entry->as_string;
 
-	} else {
-		return keys(%{$self->{data}->{$group}->{$key}});
+This method returns a scalar containing the full entry in .desktop format. This
+data can then be used to write the entry to disk.
 
+=cut
+
+sub as_string {
+	my $self = shift;
+	my $data;
+
+	if (defined($self->{comments}->{$ROOT_GROUP})) {
+		foreach my $key (keys(%{$self->{comments}->{$ROOT_GROUP}})) {
+			foreach my $comment (@{$self->{comments}->{$ROOT_GROUP}->{$key}}) {
+				$data .= sprintf("# %s\n", $comment);
+			}
+		}
 	}
+
+	foreach my $group (sort($self->groups)) {
+		$data .= sprintf("[%s]\n", $group);
+
+		if (defined($self->{comments}->{$group}) && defined($self->{comments}->{$group}->{''})) {
+			foreach my $comment (@{$self->{comments}->{$group}->{''}}) {
+				$data .= sprintf("# %s\n", $comment);
+			}
+		}
+
+		foreach my $key (sort($self->keys($group))) {
+			foreach my $locale (sort($self->locales($key, $group))) {
+				my $name = sprintf('%s%s', $key, ($locale ne $DEFAULT_LOCALE ? sprintf('[%s]', $locale) : ''));
+				$data .= sprintf("%s=%s\n", $name, $self->get_value($key, $group, $locale));
+
+				if (defined($self->{comments}->{$group}) && defined($self->{comments}->{$group}->{$name})) {
+					foreach my $comment (@{$self->{comments}->{$group}->{$name}}) {
+						$data .= sprintf("# %s\n", $comment);
+					}
+				}
+
+			}
+		}
+
+		$data .= "\n";
+	}
+
+	return $data;
+}
+
+=pod
+
+	$entry->reset;
+
+This method restores the entry to its initial state - it undoes any changes
+made to the values stored in the entry.
+
+=cut
+
+sub reset {
+	my $self = shift;
+	$self->{data} = {};
+	return $self->parse;
 }
 
 =pod
@@ -316,14 +412,6 @@ sub StartupNotify	{ return ($_[0]->get_value('StartupNotify', $DEFAULT_GROUP, $_
 =head1 NOTES
 
 Please note that according to the Freedesktop.org spec, key names are case-sensitive.
-
-=head1 TODO
-
-=over
-
-=item * Support modification of values, and writing back.
-
-=back
 
 =head1 SEE ALSO
 
