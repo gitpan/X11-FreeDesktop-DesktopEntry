@@ -1,4 +1,4 @@
-# $Id: DesktopEntry.pm,v 1.4 2005/01/03 18:12:38 jodrell Exp $
+# $Id: DesktopEntry.pm,v 1.9 2005/01/12 17:13:02 jodrell Exp $
 # Copyright (c) 2005 Gavin Brown. All rights reserved. This program is
 # free software; you can redistribute it and/or modify it under the same
 # terms as Perl itself. 
@@ -8,7 +8,7 @@ use vars qw($VERSION $ROOT_GROUP $DEFAULT_GROUP $DEFAULT_LOCALE @REQUIRED $VERBO
 use utf8;
 use strict;
 
-our $VERSION		= '0.03';
+our $VERSION		= '0.04';
 our $ROOT_GROUP		= '_root';
 our $DEFAULT_GROUP	= 'Desktop Entry';
 our $DEFAULT_LOCALE	= 'C';
@@ -63,10 +63,6 @@ sub new_from_data {
 	my ($package, $data) = @_;
 	my $self = { _raw => $data };
 	bless($self, $package);
-	if ($self->{_raw} eq '') {
-		carp("got no data for $self->{uri}") unless ($SILENT == 1);
-		return undef;
-	}
 	return undef unless ($self->parse);
 	return $self;
 }
@@ -199,7 +195,7 @@ sub keys {
 	my ($self, $group, $locale) = @_;
 	$group	= (defined($group) ? $group : $DEFAULT_GROUP);
 	my %keys;
-	foreach my $key (keys(%{$self->{data}->{$group}})) {
+	foreach my $key (CORE::keys(%{$self->{data}->{$group}})) {
 		# add the key if $locale is defined and a value exists for that locale, or if $locale isn't defined:
 		$keys{$key}++ if ((defined($locale) && defined($self->{data}->{$group}->{$key}->{$locale})) || !defined($locale));
 	}
@@ -250,7 +246,7 @@ sub locales {
 		return undef;
 
 	} else {
-		return keys(%{$self->{data}->{$group}->{$key}});
+		return CORE::keys(%{$self->{data}->{$group}->{$key}});
 
 	}
 }
@@ -311,6 +307,7 @@ sub set_value {
 	my ($self, $key, $value, $locale, $group) = @_;
 	$group	= (defined($group) ? $group : $DEFAULT_GROUP);
 	$locale	= (defined($locale) ? $locale : $DEFAULT_LOCALE);
+	($locale, undef) = split(/\./, $locale, 2); # in case locale is of the form xx_YY.UTF-8
 	$self->{data}->{$group}->{$key}->{$locale} = $value;
 	return 1;
 }
@@ -329,7 +326,7 @@ sub as_string {
 	my $data;
 
 	if (defined($self->{comments}->{$ROOT_GROUP})) {
-		foreach my $key (keys(%{$self->{comments}->{$ROOT_GROUP}})) {
+		foreach my $key (CORE::keys(%{$self->{comments}->{$ROOT_GROUP}})) {
 			foreach my $comment (@{$self->{comments}->{$ROOT_GROUP}->{$key}}) {
 				$data .= sprintf("# %s\n", $comment);
 			}
